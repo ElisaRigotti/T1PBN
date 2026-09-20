@@ -22,6 +22,15 @@ O programa gera dois arquivos:
 - `baguncada.png` — imagem embaralhada
 - `recuperada.png` — imagem recuperada (idêntica à original)
 
+
+## Resultado visual
+ 
+| Original | Bagunçada | Recuperada |
+|:--------:|:---------:|:----------:|
+| ![Original](predio32.jpg) | ![Bagunçada](baguncada.png) | ![Recuperada](recuperada.png) |
+ 
+A imagem bagunçada é completamente irreconhecível — nenhuma forma, cor ou padrão do original é visível. A imagem recuperada é **idêntica byte a byte** à original (0 bytes diferentes).
+
 ## Técnicas escolhidas
 
 ### Confusão — Camada 1: Rotação de Bits
