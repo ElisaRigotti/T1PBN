@@ -60,6 +60,9 @@ void confusao_rotacao_inversa(unsigned char *dados, int total_bytes);
 // Confusão - Camada 2: XOR por posição
 void confusao_xor(unsigned char *dados, int total_bytes);
 
+// Difusão - Camada 3: Arnold Cat Map
+void difusao_arnold(Pixel *entrada, Pixel *saida, int width, int height);
+void difusao_arnold_inversa(Pixel *entrada, Pixel *saida, int width, int height);
 
 // Verificação
 int verificar_recuperacao(unsigned char *original, unsigned char *recuperada, int total_bytes);
@@ -119,6 +122,22 @@ int main(int argc, char* argv[]) {
   printf("[2] Aplicando XOR por posição...\n");
   confusao_xor(p_in, total_bytes);
 
+  // Passo 3: Difusão - Camada 3 (Arnold Cat Map)
+  // Copia os resultados da confusão para out, depois aplica Arnold de out -> in
+  printf("[3] Aplicando Arnold Cat Map...\n");
+  Pixel *temp = malloc(tam * sizeof(Pixel));
+  difusao_arnold(in.pixels, temp, in.width, in.height);
+
+  // Copia os resultados de volta para in
+  Pixel *p_pixel_src = temp;
+  Pixel *p_pixel_dst = in.pixels;
+  for(int i=0; i<tam; i++){
+    *p_pixel_dst = *p_pixel_src;
+    p_pixel_src++;
+    p_pixel_dst++;
+  }
+  free(temp);
+
   // Salvar a imagem bagunçada
   stbi_write_png("baguncada.png", in.width, in.height, 3, in.pixels, in.width * 3);
   printf("-> Imagem bagunçada salva em 'baguncada.png'\n");
@@ -136,6 +155,20 @@ int main(int argc, char* argv[]) {
     p_src++;
     p_dst++;
   }
+
+  // Passo 3⁻¹: Difusão inversa - Camada 3 (Arnold Cat Map inverso)
+  printf("[3⁻¹] Desfazendo Arnold Cat Map...\n");
+  temp = malloc(tam * sizeof(Pixel));
+  difusao_arnold_inversa(out.pixels, temp, out.width, out.height);
+
+  p_pixel_src = temp;
+  p_pixel_dst = out.pixels;
+  for(int i=0; i<tam; i++){
+    *p_pixel_dst = *p_pixel_src;
+    p_pixel_src++;
+    p_pixel_dst++;
+  }
+  free(temp);
   
   unsigned char *p_out = (unsigned char *)out.pixels;
   
@@ -156,6 +189,7 @@ int main(int argc, char* argv[]) {
   // Verificação de Recuperação
   // =====================================================================
   printf("\n=== VERIFICAÇÃO ===\n");
+  p_out = (unsigned char *)out.pixels;
   int erros = verificar_recuperacao(copia_original, p_out, total_bytes);
 
   if(erros == 0){
@@ -224,6 +258,73 @@ void confusao_xor(unsigned char *dados, int total_bytes){
     *p = *p ^ chave;
     p++;
   }
+}
+
+// =====================================================================
+// DIFUSÃO - CAMADA 3: ARNOLD CAT MAP
+// =====================================================================
+
+void difusao_arnold(Pixel *entrada, Pixel *saida, int width, int height){
+  int tam = width * height;
+
+  Pixel *temp = malloc(tam * sizeof(Pixel));
+
+  // Passo 1: cisalhamento horizontal
+  for(int y=0; y<height; y++){
+    for(int x=0; x<width; x++){
+      int novo_x = (x+y*2) % width;
+
+      Pixel *p_in = entrada + (y * width + x);
+      Pixel *p_out = temp + (y * width + novo_x);
+
+      *p_out = *p_in;
+    }
+  }
+  
+  // Passo 2: cisalhamento vertical
+  for(int y=0; y<height; y++){
+    for(int x=0; x<width; x++){
+      int novo_y = (y+x*3) % height;
+
+      Pixel *p_in = temp + (y * width + x);
+      Pixel *p_out = saida + (novo_y * width + x);
+
+      *p_out = *p_in;
+    }
+  }
+
+  free(temp);
+
+}
+
+// Inversa
+void difusao_arnold_inversa(Pixel *entrada, Pixel *saida, int width, int height){
+  int tam = width * height;
+  Pixel *temp = malloc(tam * sizeof(Pixel));
+
+  for(int y=0; y<height; y++){
+    for(int x=0; x<width; x++){
+      int orig_y = ((y - x * 3) % height + height)%height; 
+
+      Pixel *p_in = entrada + (y * width + x);
+      Pixel *p_out = temp + (orig_y * width + x);
+
+      *p_out = *p_in;
+    }
+  }  
+
+  for(int y=0; y<height; y++){
+    for(int x=0; x<width; x++){
+      int orig_x = ((x - y * 2) % width + width)%width; 
+
+      Pixel *p_in = temp + (y * width + x); 
+      Pixel *p_out = saida + (y * width + orig_x);
+
+      *p_out = *p_in;
+    }
+  }  
+
+  free(temp);
 }
 
 // =====================================================================
