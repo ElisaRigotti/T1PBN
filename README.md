@@ -111,6 +111,111 @@ void confusao_rotacao(unsigned char *dados, int total_bytes) {
 
 O cast `(unsigned char *)in.pixels` permite tratar o array de `Pixel` (structs de 3 bytes) como uma sequência de bytes individuais — a confusão trabalha byte a byte, não pixel a pixel.
 
+### Confusão — Camada 2: XOR por Posição
+ 
+#### O que é XOR
+ 
+XOR (exclusive or) é uma operação bitwise que compara dois bits e retorna 1 apenas quando eles são **diferentes**:
+ 
+```
+A   B   A ^ B
+0   0     0
+0   1     1
+1   0     1
+1   1     0
+```
+ 
+Quando aplicamos XOR entre um byte e uma "chave", cada bit do byte é invertido (ou não) dependendo do bit correspondente da chave.
+ 
+#### Exemplo — XOR entre um byte e uma chave
+ 
+```
+Byte original:   1 0 1 1 0 0 0 1    (177)
+Chave:           0 1 1 0 1 0 1 0    (106)
+                 ─ ─ ─ ─ ─ ─ ─ ─
+Resultado XOR:   1 1 0 1 1 0 1 1    (219)
+                 │ │ │ │ │ │ │ │
+                 = ≠ ≠ = ≠ = ≠ =
+                 ↑
+          onde chave=0, bit fica igual
+          onde chave=1, bit é invertido
+```
+#### Propriedade fundamental: XOR é auto-inverso
+ 
+A grande vantagem do XOR é que ele **desfaz a si mesmo**. Aplicar XOR com a mesma chave duas vezes recupera o valor original:
+ 
+```
+byte ^ chave ^ chave == byte
+```
+ 
+Demonstrando com o exemplo acima:
+ 
+```
+Original:        1 0 1 1 0 0 0 1    (177)
+XOR com chave:   1 1 0 1 1 0 1 1    (219)   ← bagunçado
+XOR com chave:   1 0 1 1 0 0 0 1    (177)   ← voltou ao original!
+```
+ 
+Isso significa que **a mesma função** serve tanto pra bagunçar quanto pra desbagunçar, ou seja, não precisa de uma função inversa separada.
+ 
+#### Regra autoral — chave variável por posição
+ 
+O XOR por si só é uma técnica conhecida. O que torna a nossa implementação única é a **fórmula que gera uma chave diferente para cada byte**:
+ 
+```c
+unsigned char chave = (unsigned char)((i * 31 + 17) % 256);
+```
+ 
+Onde `i` é a posição do byte na imagem. Essa fórmula gera uma sequência pseudo-aleatória de chaves:
+ 
+| Posição do byte | `i * 31 + 17` | `% 256` | Chave gerada |
+|-----------------|---------------|---------|--------------|
+| 0               | 17            | 17      | 17           |
+| 1               | 48            | 48      | 48           |
+| 2               | 79            | 79      | 79           |
+| 3               | 110           | 110     | 110          |
+| 4               | 141           | 141     | 141          |
+| 5               | 172           | 172     | 172          |
+| 6               | 203           | 203     | 203          |
+| 7               | 234           | 234     | 234          |
+| 8               | 265           | 9       | 9            |
+ 
+Os números 31 e 17 foram escolhidos porque:
+- **31 é primo** — multiplicar por um primo garante que a sequência demora o máximo possível pra se repetir (ciclo de 256 valores antes de recomeçar)
+- **17 é o deslocamento (offset)** — evita que a posição 0 tenha chave 0 (que não alteraria o byte, já que `byte ^ 0 == byte`)
+#### Por que escolhemos XOR
+ 
+- O XOR combinado com a rotação de bits (Camada 1) cria uma confusão de **duas camadas**: primeiro os bits são reorganizados dentro de cada byte, depois cada byte é misturado com uma chave única
+- A implementação usa o operador bitwise `^`, demonstrando mais uma operação em nível de bits
+- A auto-inversibilidade (`a ^ b ^ b == a`) garante recuperação 100% exata
+#### Inversa
+ 
+Como XOR é auto-inverso, a mesma função `confusao_xor()` serve para aplicar e desfazer. Não precisamos de uma função inversa separada.
+ 
+#### Implementação com ponteiros
+ 
+Percorre a imagem byte a byte usando um ponteiro `unsigned char *p` com `p++`, da mesma forma que a Camada 1:
+ 
+```c
+void confusao_xor(unsigned char *dados, int total_bytes) {
+  unsigned char *p = dados;
+  for (int i = 0; i < total_bytes; i++) {
+    unsigned char chave = (unsigned char)((i * 31 + 17) % 256);
+    *p = *p ^ chave;
+    p++;
+  }
+}
+```
+ 
+### Ordem das camadas
+ 
+Na hora de bagunçar, aplicamos Camada 1 primeiro e Camada 2 depois. Na hora de desbagunçar, a ordem é **inversa** — Camada 2 primeiro e Camada 1 depois:
+ 
+```
+Bagunçar:      original → [1] rotação → [2] XOR → bagunçada
+Desbagunçar:   bagunçada → [2⁻¹] XOR → [1⁻¹] rotação inversa → recuperada
+```
+
 ## Estrutura do projeto
 
 ```

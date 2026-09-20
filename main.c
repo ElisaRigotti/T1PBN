@@ -57,6 +57,10 @@ unsigned char rotacionar_direita(unsigned char byte, int n);
 void confusao_rotacao(unsigned char *dados, int total_bytes);
 void confusao_rotacao_inversa(unsigned char *dados, int total_bytes);
 
+// Confusão - Camada 2: XOR por posição
+void confusao_xor(unsigned char *dados, int total_bytes);
+
+
 // Verificação
 int verificar_recuperacao(unsigned char *original, unsigned char *recuperada, int total_bytes);
 
@@ -111,12 +115,16 @@ int main(int argc, char* argv[]) {
   unsigned char *p_in = (unsigned char *)in.pixels;
   confusao_rotacao(p_in, total_bytes);
 
+  // Passo 2: Confusão - Camada 2 (XOR por posição)
+  printf("[2] Aplicando XOR por posição...\n");
+  confusao_xor(p_in, total_bytes);
+
   // Salvar a imagem bagunçada
   stbi_write_png("baguncada.png", in.width, in.height, 3, in.pixels, in.width * 3);
   printf("-> Imagem bagunçada salva em 'baguncada.png'\n");
 
   // =====================================================================
-  // Desbagunçar (ordem inversa: 1⁻¹)
+  // Desbagunçar (ordem inversa: 2⁻¹, 1⁻¹)
   // =====================================================================
   printf("\n=== DESBAGUNÇANDO ===\n");
 
@@ -128,10 +136,16 @@ int main(int argc, char* argv[]) {
     p_src++;
     p_dst++;
   }
+  
+  unsigned char *p_out = (unsigned char *)out.pixels;
+  
+  // Passo 2⁻¹: Confusão inversa - Camada 2 (XOR por posição)
+  // XOR é auto-inverso, então aplicamos a mesma operação
+  printf("[2⁻¹] Desfazendo XOR por posição...\n");
+  confusao_xor(p_out, total_bytes);
 
   // Passo 1⁻¹: Confusão inversa - Camada 1 (Rotação de bits inversa)
   printf("[1⁻¹] Desfazendo rotação de bits...\n");
-  unsigned char *p_out = (unsigned char *)out.pixels;
   confusao_rotacao_inversa(p_out, total_bytes);
 
   // Salvar a imagem recuperada
@@ -191,6 +205,23 @@ void confusao_rotacao_inversa(unsigned char *dados, int total_bytes){
   for(int i=0; i<total_bytes; i++){
     int n = (i%7)+1; // rotação de 1 a 7, dependendo da posição
     *p = rotacionar_direita(*p, n);
+    p++;
+  }
+}
+
+// =====================================================================
+// CONFUSÃO - CAMADA 2: XOR POR POSIÇÃO
+// =====================================================================
+
+// Aplicamos XOR em cada byte usando uma chave que depende da posição
+// A chave é gerada pela fórmula: (i * 31 + 17) % 256
+// E como dito anteriormente, XOR é auto-inverso, então usamos a mesma 
+// funçar para bagunçar e desbagunçar
+void confusao_xor(unsigned char *dados, int total_bytes){
+  unsigned char *p = dados;
+  for(int i=0; i<total_bytes; i++){
+    unsigned char chave = (unsigned char)((i * 31 + 17) % 256);
+    *p = *p ^ chave;
     p++;
   }
 }
