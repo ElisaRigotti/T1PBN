@@ -207,14 +207,152 @@ void confusao_xor(unsigned char *dados, int total_bytes) {
 }
 ```
  
+### Difusão — Camada 3: Arnold Cat Map
+ 
+As Camadas 1 e 2 são técnicas de **confusão**: alteram os *valores* dos bytes, mas cada pixel continua na mesma posição. Isso significa que, mesmo com os valores completamente alterados, a **silhueta** da imagem original ainda pode ser visível — áreas claras continuam claras e áreas escuras continuam escuras, só que com cores erradas.
+ 
+A Camada 3 é uma técnica de **difusão**: ela **embaralha as posições** dos pixels, distribuindo-os por toda a imagem. Combinada com a confusão, a imagem se torna completamente irreconhecível.
+ 
+#### O que é o Arnold Cat Map
+ 
+O Arnold Cat Map é uma transformação matemática criada pelo matemático Vladimir Arnold em 1968. Originalmente aplicada a imagens quadradas (NxN), ela rearranja os pixels de forma determinística e reversível — como embaralhar um baralho sempre na mesma ordem.
+ 
+O nome "Cat Map" vem do fato de Arnold ter demonstrado a transformação usando a imagem de um gato.
+ 
+#### O problema: imagens retangulares
+ 
+O Arnold Cat Map clássico usa a fórmula:
+ 
+```
+novo_x = (x + y) mod N
+novo_y = (x + 2y) mod N
+```
+ 
+Essa fórmula só funciona para imagens **quadradas** (NxN), porque usa o mesmo módulo N para ambas as coordenadas. Em uma imagem retangular (como 1280×960), aplicar a fórmula diretamente causa **colisões** — dois pixels diferentes podem ser mapeados para a mesma posição, destruindo informação.
+ 
+#### Solução: decomposição por cisalhamento (shearing)
+ 
+Para funcionar com qualquer tamanho, decompomos a transformação em **dois cisalhamentos separados**:
+ 
+```
+Passo A — cisalhamento horizontal: novo_x = (x + y * 2) % width
+Passo B — cisalhamento vertical:   novo_y = (y + x * 3) % height
+```
+ 
+Cada cisalhamento opera em uma dimensão de cada vez:
+- O Passo A desloca pixels **horizontalmente** dentro de cada linha — usa apenas `% width`
+- O Passo B desloca pixels **verticalmente** dentro de cada coluna — usa apenas `% height`
+Como cada passo desloca pixels apenas dentro da sua dimensão, **não há colisões**. Dois pixels na mesma linha com `x` diferentes produzem `novo_x` diferentes (porque a soma com `y*2` é diferente para cada `x`, e o módulo por `width` preserva a bijeção dentro da linha). O mesmo vale para o cisalhamento vertical.
+ 
+#### Exemplo — cisalhamento horizontal (Passo A)
+ 
+Considerando uma imagem 5×4. O Passo A aplica `novo_x = (x + y * 2) % 5`:
+ 
+```
+Linha y=0: cada pixel se desloca 0*2 = 0 posições (fica no lugar)
+Linha y=1: cada pixel se desloca 1*2 = 2 posições pra direita
+Linha y=2: cada pixel se desloca 2*2 = 4 posições pra direita
+Linha y=3: cada pixel se desloca 3*2 = 6 ≡ 1 posição pra direita (mod 5)
+ 
+Antes:          Depois:
+A B C D E       A B C D E       (y=0: sem deslocamento)
+F G H I J       I J F G H       (y=1: +2 posições, circular)
+K L M N O       O K L M N       (y=2: +4 posições, circular)
+P Q R S T       T P Q R S       (y=3: +1 posição, circular)
+```
+ 
+Cada linha é deslocada circularmente por uma quantidade diferente. Nenhum pixel é perdido — apenas reposicionado.
+ 
+#### Regra autoral — coeficientes de cisalhamento
+ 
+A decomposição por cisalhamento é uma técnica conhecida. O que torna a nossa implementação única são os **coeficientes escolhidos** para cada passo:
+ 
+```c
+// Passo A: coeficiente 2
+int novo_x = (x + y * 2) % width;
+ 
+// Passo B: coeficiente 3
+int novo_y = (y + x * 3) % height;
+```
+ 
+Os coeficientes **2** e **3** controlam a intensidade do embaralhamento:
+- Valores maiores causam deslocamentos mais agressivos, espalhando os pixels mais longe das suas posições originais
+- Valores diferentes para cada passo (2 ≠ 3) evitam padrões simétricos no embaralhamento
+- Ambos são coprimos com as dimensões típicas de imagem, maximizando a distribuição
+#### Por que escolhemos o Arnold Cat Map
+ 
+- É uma técnica clássica de criptografia de imagens, usada em artigos acadêmicos de segurança
+- A decomposição por cisalhamento demonstra manipulação de coordenadas 2D com aritmética modular
+- Combina perfeitamente com a confusão: as Camadas 1 e 2 destroem os valores, a Camada 3 destrói as posições
+- É 100% reversível: os cisalhamentos inversos recuperam cada pixel exatamente
+#### Inversa
+ 
+Desfaz os cisalhamentos na **ordem inversa**. Se bagunçar foi A→B, desbagunçar é B⁻¹→A⁻¹:
+ 
+```
+Inversa do Passo B: orig_y = (y - x * 3) % height
+Inversa do Passo A: orig_x = (x - y * 2) % width
+```
+ 
+Em C, o operador `%` pode retornar valores negativos para operandos negativos (`-7 % 5` retorna `-2` em vez de `3`). Para corrigir isso, usamos a fórmula:
+ 
+```c
+int orig_y = ((y - x * 3) % height + height) % height;
+```
+ 
+O `+ height` garante que o valor fique positivo antes do segundo `%`, produzindo o resultado matematicamente correto.
+ 
+#### Implementação com ponteiros
+ 
+A difusão trabalha pixel a pixel (não byte a byte como a confusão), usando ponteiros `Pixel *` com aritmética de ponteiros para acessar posições calculadas:
+ 
+```c
+void difusao_arnold(Pixel *entrada, Pixel *saida, int width, int height) {
+  int tam = width * height;
+  Pixel *temp = malloc(tam * sizeof(Pixel));
+ 
+  // Passo A: cisalhamento horizontal
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      int novo_x = (x + y * 2) % width;
+ 
+      Pixel *p_in  = entrada + (y * width + x);
+      Pixel *p_out = temp + (y * width + novo_x);
+ 
+      *p_out = *p_in;
+    }
+  }
+ 
+  // Passo B: cisalhamento vertical
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      int novo_y = (y + x * 3) % height;
+ 
+      Pixel *p_in  = temp + (y * width + x);
+      Pixel *p_out = saida + (novo_y * width + x);
+ 
+      *p_out = *p_in;
+    }
+  }
+ 
+  free(temp);
+}
+```
+ 
+A expressão `entrada + (y * width + x)` usa aritmética de ponteiros: o compilador calcula o endereço do pixel na posição (x, y) somando o deslocamento `y * width + x` ao ponteiro base. Como o ponteiro é do tipo `Pixel *`, cada unidade de deslocamento avança `sizeof(Pixel)` bytes (3 bytes), acessando diretamente o pixel correto sem precisar de casts ou indexação de array.
+ 
+O buffer `temp` é necessário porque os dois cisalhamentos não podem ser feitos no mesmo array — o Passo A precisa terminar completamente antes que o Passo B leia seus resultados.
+ 
 ### Ordem das camadas
  
-Na hora de bagunçar, aplicamos Camada 1 primeiro e Camada 2 depois. Na hora de desbagunçar, a ordem é **inversa** — Camada 2 primeiro e Camada 1 depois:
+Na hora de bagunçar, aplicamos as 3 camadas em sequência. Na hora de desbagunçar, a ordem é **inversa**:
  
 ```
-Bagunçar:      original → [1] rotação → [2] XOR → bagunçada
-Desbagunçar:   bagunçada → [2⁻¹] XOR → [1⁻¹] rotação inversa → recuperada
+Bagunçar:      original → [1] rotação → [2] XOR → [3] Arnold → bagunçada
+Desbagunçar:   bagunçada → [3⁻¹] Arnold inverso → [2⁻¹] XOR → [1⁻¹] rotação inversa → recuperada
 ```
+ 
+As camadas de confusão (1 e 2) são aplicadas primeiro porque trabalham byte a byte — alterar os valores *antes* de embaralhar as posições garante que os padrões espaciais da imagem (bordas, gradientes) já estejam destruídos quando a difusão redistribui os pixels. Se a ordem fosse invertida (difusão primeiro), o Arnold Cat Map apenas moveria pixels intactos, e padrões locais ainda poderiam ser reconhecíveis.
 
 ## Estrutura do projeto
 
