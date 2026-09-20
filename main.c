@@ -46,9 +46,23 @@ typedef struct {
 // As 2 imagens
 Img in, out;
 
-// Protótipos
+// =====================================================================
+// PROTÓTIPOS
+// =====================================================================
 void load(char* name, Img* pic);
 
+// Confusão - Camada 1: Rotação de bits
+unsigned char rotacionar_esquerda(unsigned char byte, int n);
+unsigned char rotacionar_direita(unsigned char byte, int n);
+void confusao_rotacao(unsigned char *dados, int total_bytes);
+void confusao_rotacao_inversa(unsigned char *dados, int total_bytes);
+
+// Verificação
+int verificar_recuperacao(unsigned char *original, unsigned char *recuperada, int total_bytes);
+
+// =====================================================================
+// MAIN
+// =====================================================================
 int main(int argc, char* argv[]) {
   if (argc < 2) {
     printf("bagunceitor [origem]\n");
@@ -69,32 +83,143 @@ int main(int argc, char* argv[]) {
   out.pixels = malloc(tam * sizeof(Pixel));
   memset(out.pixels, 0, tam * sizeof(Pixel));
 
+  int total_bytes = tam * 3;
+
   // Converte para interpretar como matrizes
   Pixel(*pin)[in.width] = (Pixel(*)[in.height])in.pixels;
   Pixel(*pout)[in.width] = (Pixel(*)[in.height])out.pixels;
 
-  //
-  // Neste ponto, voce deve implementar os seus algoritmos!
-  // (ou chamar funcoes para fazer isso)
-  //
-  // Aplica o algoritmo em pin e gera a saida em pout
-  // ...
-  //
-  // Exemplo: inverte as cores
-  for (int i = 0; i < in.height; i++) {
-    for (int j = 0; j < in.width; j++) {
-      pout[i][j].r = 255 - pin[i][j].r;
-      pout[i][j].g = 255 - pin[i][j].g;
-      pout[i][j].b = 255 - pin[i][j].b;
-    }
+  // =====================================================================
+  // Guarda uma cópia da imagem original para verificação depois
+  // =====================================================================
+  unsigned char *copia_original = malloc(total_bytes);
+  unsigned char *p_src = (unsigned char *)in.pixels;
+  unsigned char *p_dst = copia_original;
+  for(int i=0; i<total_bytes; i++){
+    *p_dst = *p_src;
+    p_src++;
+    p_dst++;
   }
 
-  // Grava a imagem como PNG para registro
-  stbi_write_png("saida.png", out.width, out.height, 3, pout, 0);
+  // =====================================================================
+  // Bangunçar
+  // =====================================================================
+  printf("\n=== BAGUNÇANDO ===\n");
 
-  free(in.pixels);
-  free(out.pixels);
+  // Passo 1: Confusão - Camada 1 (Rotação de bits)
+  printf("[1] Aplicando rotação de bits...\n");
+  unsigned char *p_in = (unsigned char *)in.pixels;
+  confusao_rotacao(p_in, total_bytes);
+
+  // Salvar a imagem bagunçada
+  stbi_write_png("baguncada.png", in.width, in.height, 3, in.pixels, in.width * 3);
+  printf("-> Imagem bagunçada salva em 'baguncada.png'\n");
+
+  // =====================================================================
+  // Desbagunçar (ordem inversa: 1⁻¹)
+  // =====================================================================
+  printf("\n=== DESBAGUNÇANDO ===\n");
+
+  // Copia a imagem bagunçada pra out (usando ponteiros)
+  p_src = (unsigned char *)in.pixels;
+  p_dst = (unsigned char *)out.pixels;
+  for(int i = 0; i<total_bytes; i++){
+    *p_dst = *p_src;
+    p_src++;
+    p_dst++;
+  }
+
+  // Passo 1⁻¹: Confusão inversa - Camada 1 (Rotação de bits inversa)
+  printf("[1⁻¹] Desfazendo rotação de bits...\n");
+  unsigned char *p_out = (unsigned char *)out.pixels;
+  confusao_rotacao_inversa(p_out, total_bytes);
+
+  // Salvar a imagem recuperada
+  stbi_write_png("recuperada.png", out.width, out.height, 3, out.pixels, out.width * 3);
+  printf("-> Imagem recuperada salva em 'recuperada.png'\n");
+
+  // =====================================================================
+  // Verificação de Recuperação
+  // =====================================================================
+  printf("\n=== VERIFICAÇÃO ===\n");
+  int erros = verificar_recuperacao(copia_original, p_out, total_bytes);
+
+  if(erros == 0){
+    printf("SUCESSO! Recuperação 100%% exata. 0 bytes diferentes. \n");
+    } else {
+    printf("FALHA! %d bytes diferentes de %d totais.\n", erros, total_bytes);
+    }
+
+    // Libera memória
+    free(copia_original);
+    free(in.pixels);
+    free(out.pixels);
+    
+    return 0;
+  }
+
+
+// =====================================================================
+// CONFUSÃO - CAMADA 1: ROTAÇÃO DE BITS
+// =====================================================================
+
+// Rotaciona os bits de um byte N posições pra esquerda
+unsigned char rotacionar_esquerda(unsigned char byte, int n){
+  n = n % 8;
+  return (byte << n | (byte >> (8-n)));
 }
+
+// Rotaciona os bits de um byte N posições pra direita (inversa)
+unsigned char rotacionar_direita(unsigned char byte, int n){
+  n = n % 8;
+  return (byte >> n | (byte << (8-n)));
+}
+
+// Aplica rotação de bits em todos os bytes da imagem
+// A quantidade de rotação varia com a posição (REGRA AUTORAL)
+void confusao_rotacao(unsigned char *dados, int total_bytes){
+  unsigned char *p = dados;
+  for(int i=0; i<total_bytes; i++){
+    int n = (i%7)+1; // rotação de 1 a 7, dependendo da posição
+    *p = rotacionar_esquerda(*p, n);
+    p++;
+  }
+}
+
+void confusao_rotacao_inversa(unsigned char *dados, int total_bytes){
+  unsigned char *p = dados;
+  for(int i=0; i<total_bytes; i++){
+    int n = (i%7)+1; // rotação de 1 a 7, dependendo da posição
+    *p = rotacionar_direita(*p, n);
+    p++;
+  }
+}
+
+// =====================================================================
+// VERIFICAÇÃO
+// =====================================================================
+
+int verificar_recuperacao(unsigned char *original, unsigned char *recuperada, int total_bytes){
+  int erros = 0;
+  unsigned char *po = original;
+  unsigned char *pr = recuperada;
+
+  for(int i=0; i<total_bytes; i++){
+    if(*po != *pr){
+      erros++;
+      if(erros <= 10){
+        printf("Erro no byte %d: original=%d, recuperado=%d\n", i, *po, *pr);
+      }
+    }
+    po++;
+    pr++; 
+  }
+  return erros;
+}
+
+// =====================================================================
+// CARREGAMENTO DA IMAGEM
+// =====================================================================
 
 void load(char* name, Img* pic) {
   pic->pixels =
@@ -104,12 +229,4 @@ void load(char* name, Img* pic) {
     exit(1);
   }
   printf("Load: %d x %d x %d\n", pic->width, pic->height, pic->channels);
-  // Exibe um bloco de 8 x 8 pixels em hexadecimal (teste)
-  for (int i = 0; i < 8; i++) {
-    for (int j = 0; j < 8; j++) {
-      printf("[%02X %02X %02X] ", pic->pixels[i].r, pic->pixels[i].g,
-             pic->pixels[i].b);
-    }
-    printf("\n");
-  }
 }
