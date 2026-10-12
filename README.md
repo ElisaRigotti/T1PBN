@@ -1,6 +1,6 @@
 # Bagunceitor — Confusão e Difusão em Imagens
 
-Trabalho Prático 1 de Programação de Baixo Nível (PBN) — PUCRS, 2026/1.
+Trabalho Prático 1 de Programação de Baixo Nível (PBN) — PUCRS, 2026/2.
 
 Professor: Edson Moreno
 
