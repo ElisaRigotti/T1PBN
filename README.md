@@ -376,4 +376,12 @@ bagunceitor/
 ├── CMakeLists.txt         # Alternativa ao Makefile (CMake)
 └── predio32.jpg           # Imagem de teste
 ```
+## Referências
 
+- [Difference Between Confusion and Diffusion — Tech Differences](https://techdifferences.com/difference-between-confusion-and-diffusion.html) — Comparação entre os conceitos de confusão e difusão em criptografia, propostos por Claude Shannon.
+
+- [Bit Shift Calculator — Wray Castle](https://wraycastle.com/pt/blogs/knowledge-base/bit-shift-calculator) — Guia sobre operações de deslocamento (shift) de bits, incluindo variantes lógicas e aritméticas.
+
+- [XOR Cipher — InventiveHQ](https://inventivehq.com/tools/security/xor-cipher) — Ferramenta e explicação sobre cifra XOR, criptografia e descriptografia com chave.
+
+- [Vladimir Arnold's Cat Map — Galileo Unbound](https://galileo-unbound.blog/2019/06/16/vladimir-arnolds-cat-map/) — Origem e história do Arnold Cat Map, explicando o mapeamento de esticar e dobrar de Arnold em sistemas caóticos.
